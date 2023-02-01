@@ -3,7 +3,7 @@ import random
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from analysis import 
+import analysis
 from scipy.stats import t
 from arch import arch_model
 from arch.__future__ import reindexing
