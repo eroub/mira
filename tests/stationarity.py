@@ -1,7 +1,7 @@
 import glob
 import random
 import matplotlib.pyplot as plt
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import kpss
 

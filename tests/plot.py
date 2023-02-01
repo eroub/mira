@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 
 # Global Variables
 frequency = 5000

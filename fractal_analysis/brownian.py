@@ -4,7 +4,7 @@ import numpy as np
 from pyeeg import hurst
 import matplotlib.pyplot as plt
 import scipy.signal
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 
 # Global Variables
 frequency = 2500

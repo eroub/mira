@@ -3,11 +3,11 @@ import random
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import analysis
+import helpers.analysis as analysis
 from scipy.stats import t
 from arch import arch_model
 from arch.__future__ import reindexing
-from preprocessing import process_from_parquet
+from helpers.preprocessing import process_from_parquet
 
 # Global Variables
 num_files = 21
@@ -66,7 +66,7 @@ start_time = merged_df.iloc[0]['timestamp']
 end_time = merged_df.iloc[-1]['timestamp']
 time_diff = (end_time - start_time) / (3600 * 1000)
 
-# Truncate the dataframe such that it only has timestamps within 6 hours from the first one
+# Truncate the dataframe such that it only has timestamps within 'num_hours' hours from the first one
 if time_diff > num_hours:
     truncate_time = start_time + num_hours * 3600 * 1000
     merged_df = merged_df.loc[merged_df['timestamp'] <= truncate_time]

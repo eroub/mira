@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyflux as pf
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 from scipy.stats import t
 
 # Global Variables

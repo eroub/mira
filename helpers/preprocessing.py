@@ -1,5 +1,6 @@
 import random
 import pandas as pd
+import os
 
 def convert_to_tick(data, frequency):
     # Group the dataframe by every 'frequency' rows
@@ -46,7 +47,7 @@ def grab_data(sample_file_names, frequency):
 
 def process_from_parquet(num_days, num_check_days):
     # Read in the parquet file
-    df = pd.read_parquet("./daily_data/data200.parquet")
+    df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
 
     # Get the max_index allowed by leaving enough room for the num_check_days
     last_timestamp = df['timestamp'].iloc[-1]

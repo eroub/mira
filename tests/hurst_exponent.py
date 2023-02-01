@@ -5,7 +5,7 @@ import nolds
 from scipy.stats import linregress
 from pyeeg import hurst
 import pywt
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 
 # Global Variables
 frequency = 2500

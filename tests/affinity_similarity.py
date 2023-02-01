@@ -2,7 +2,7 @@ import glob
 import random
 import numpy as np
 import pandas as pd
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 from numpy.polynomial import polynomial as poly
 from scipy.stats import linregress
 from tqdm import tqdm

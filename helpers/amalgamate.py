@@ -1,11 +1,11 @@
 import glob
 import pandas as pd
 import pyarrow
-from preprocessing import convert_to_tick
+from helpers.preprocessing import convert_to_tick
 from tqdm import tqdm
 
 # Set desired frequency (num trades to make a tick bar)
-frequency = 500
+frequency = 200
 
 # Find all of the files with the desired file name format, then sort them
 file_names = sorted(glob.glob("./daily_data/BTCUSDT-trades-*-*-*.csv"))
@@ -36,5 +36,5 @@ for file_name in tqdm(file_names):
     res = pd.concat([res, subset_data], axis=0)
 
 print(res)
-# Create data200.parquet
-res.to_parquet("data200.parquet")
+# Create dataxxx.parquet
+res.to_parquet("data{}.parquet".format(frequency))

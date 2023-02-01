@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pywt
 import matplotlib.pyplot as plt
-from preprocessing import grab_data
+from helpers.preprocessing import grab_data
 
 # Global Variables
 frequency = 10000

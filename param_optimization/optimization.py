@@ -7,7 +7,7 @@ from tqdm import tqdm
 from scipy.stats import t
 from arch import arch_model
 from arch.__future__ import reindexing
-from preprocessing import process_from_parquet
+from helpers.preprocessing import process_from_parquet
 
 # Global Variables
 num_files = 21
