@@ -16,14 +16,15 @@ from helpers.preprocessing import process_from_parquet
 num_files = 21
 check_num = 1
 num_hours = 3
-tries = 100
+tries = 500
 # Model Variables
 # 
 genetic_res_mean_median = [[2,0,1],[3,0,1],[1,0,3],[1,0,1],[3,0,0],[0,2,1],[3,0,3],[0,1,1],[2,0,0],[1,0,0]]
 genetic_res_rmse = [[3,0,2],[0,3,3],[0,1,1],[3,0,1],[0,1,2],[0,2,1],[0,2,0],[0,3,0]]
+genetic_res_da = [[0,3,2],[2,2,0],[0,1,3],[1,3,0],[1,0,0],[0,2,3],[0,3,1],[0,2,1],[0,2,0],[3,1,0]]
 
 # Define the prediction algorithm
-def pred_algo(params):
+def pred_algo(params, choice):
     res, check_data = process_from_parquet(num_files, check_num)
 
     # Calculate the difference between consecutive OHLC values
@@ -78,17 +79,22 @@ def pred_algo(params):
     bins = pd.cut(merged_df['timestamp'], num_hours)
     grouped_df = merged_df.groupby(bins)
 
-    # Calculate the directional accurancy 
+    # Return the averaged median
     # merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
     # grouped_df = merged_df.groupby(bins)
     # agg_stats = grouped_df['residual'].agg(['mean', 'median'])
-
-    # residual_average = np.mean(np.abs(agg_stats['median'].values))
-
-    return analysis.directional_accuracy(merged_df['close'], merged_df['pred_price'])
+    # return np.mean(np.abs(agg_stats['median'].values))
+    # Return directional accuracy or RSME based on user choice
+    if choice == 0:
+        return analysis.directional_accuracy(merged_df['close'], merged_df['pred_price'])
+    else:
+        return analysis.rmse(merged_df)
 
 result_dict = {}
-for param in tqdm(genetic_res):
+print("What sort of optimization?")
+opt_type = int(input("0: Directional Accuracy - 1: Root Mean Square Error"))
+if opt_type != 1 and opt_type != 0: exit()
+for param in tqdm(genetic_res_rmse):
     i = 0
     arr = []
     while i < tries:

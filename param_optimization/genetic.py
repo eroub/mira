@@ -25,7 +25,7 @@ q_volatility_lag = [0,1,2,3]
 power_lag = [2]
 
 # Define the prediction algorithm
-def pred_algo(p, o, q, power):
+def pred_algo(p, o, q, power, choice):
     res, check_data = process_from_parquet(num_files, check_num)
 
     # Calculate the difference between consecutive OHLC values
@@ -85,10 +85,11 @@ def pred_algo(p, o, q, power):
     # grouped_df = merged_df.groupby(bins)
     # agg_stats = grouped_df['residual'].agg(['mean', 'median'])
     # return np.mean(np.abs(agg_stats['median'].values))
-    # Calculate the RMSE
-    # return analysis.rmse(merged_df)
-    # Calculate directional accuracy
-    return analysis.directional_accuracy_bins(merged_df, math.floor(math.sqrt(len(merged_df))))
+    # Return directional accuracy or RSME based on user choice
+    if choice == 0:
+        return analysis.directional_accuracy(merged_df['close'], merged_df['pred_price'])
+    else:
+        return analysis.rmse(merged_df)
 
 def crossover(parent1, parent2):
     # Choose a random index for the crossover point
@@ -110,7 +111,7 @@ def mutation(child):
 
   return child
 
-def genetic_algo():
+def genetic_algo(opt_type):
   # Initialize the population
   # Max population is 4^3 for the four options for the three parameters
   # -4 options for the fact that both p and o cannot both be 0 
@@ -142,7 +143,7 @@ def genetic_algo():
           # For model to run correctly p and o cannot both be 0
           if p <= 0 and o <= 0:
               continue
-          fitness.append(pred_algo(*individual))
+          fitness.append(pred_algo(*individual, opt_type))
 
       # Eliminate any NaN values
       fitness = np.array(fitness)
@@ -159,8 +160,9 @@ def genetic_algo():
       # Check for stop criteria
       p, o, q, power = best_individual
       # For model to run correctly p and o cannot both be 0
-      if p != 0 and o != 0 and pred_algo(*best_individual) < best_score:
-          best_score = pred_algo(*best_individual)
+      # > if want higher values, < for lower
+      if p != 0 and o != 0 and pred_algo(*best_individual, opt_type) > best_score:
+          best_score = pred_algo(*best_individual, opt_type)
           best_individual = population[0]
       else:
           break
@@ -187,10 +189,12 @@ def genetic_algo():
   # Return best_individual and best_score
   return best_individual, best_score
 
+print("What sort of optimization?")
+opt_type = int(input("0: Directional Accuracy - 1: Root Mean Square Error"))
 results = []
 num_runs = 200
 for i in tqdm(range(num_runs)):
-    best_individual, best_fitness = genetic_algo()
+    best_individual, best_fitness = genetic_algo(opt_type)
     results.append((best_individual, best_fitness))
 
 individuals = [result[0] for result in results]
