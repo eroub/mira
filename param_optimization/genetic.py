@@ -1,6 +1,11 @@
+import sys, os
+sys.path.append(os.getcwd())
+
+import math
 import random
 import pandas as pd
 import numpy as np
+import helpers.analysis as analysis
 from collections import Counter
 from tqdm import tqdm
 from scipy.stats import t
@@ -23,7 +28,10 @@ power_lag = [2]
 def pred_algo(p, o, q, power):
     res, check_data = process_from_parquet(num_files, check_num)
 
-    # Calculate the difference between consecutive closing values
+    # Calculate the difference between consecutive OHLC values
+    res['diff_open'] = res['open'].diff()
+    res['diff_high'] = res['high'].diff()
+    res['diff_low'] = res['low'].diff()
     res['diff_close'] = res['close'].diff()
     # Drop first value which is NaN
     res = res.iloc[1:]
@@ -34,7 +42,7 @@ def pred_algo(p, o, q, power):
     res['minute'] = res['datetime'].dt.minute
 
     # Specify the AMIRA-GARCH model
-    amira_garch = arch_model(res['diff_close'], vol='GARCH', p=p, o=o, q=q, power=power, dist='t', mean='HAR', x=res[['volume', 'datetime']])
+    amira_garch = arch_model(res['diff_close'], vol='GARCH', p=p, o=o, q=q, power=power, dist='t', mean='HAR', x=res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']])
     # Fit the model
     amira_garch_fit = amira_garch.fit(disp=False)
 
@@ -73,13 +81,14 @@ def pred_algo(p, o, q, power):
     grouped_df = merged_df.groupby(bins)
 
     # Calculate the mean and median of the residual for each bin
-    merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
-    grouped_df = merged_df.groupby(bins)
-    agg_stats = grouped_df['residual'].agg(['mean', 'median'])
-
-    residual_average = np.mean(np.abs(agg_stats['median'].values))
-
-    return residual_average
+    # merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
+    # grouped_df = merged_df.groupby(bins)
+    # agg_stats = grouped_df['residual'].agg(['mean', 'median'])
+    # return np.mean(np.abs(agg_stats['median'].values))
+    # Calculate the RMSE
+    # return analysis.rmse(merged_df)
+    # Calculate directional accuracy
+    return analysis.directional_accuracy_bins(merged_df, math.floor(math.sqrt(len(merged_df))))
 
 def crossover(parent1, parent2):
     # Choose a random index for the crossover point
@@ -118,8 +127,8 @@ def genetic_algo():
     population.append([p, o, q, 2])
 
   # Set the parameters for the GA
-  max_generations = 1000
-  mutation_rate = 0.01
+  max_generations = 500
+  mutation_rate = 0.02
   convergence_threshold = 0.001
 
   # Run the GA
@@ -179,7 +188,7 @@ def genetic_algo():
   return best_individual, best_score
 
 results = []
-num_runs = 150
+num_runs = 200
 for i in tqdm(range(num_runs)):
     best_individual, best_fitness = genetic_algo()
     results.append((best_individual, best_fitness))

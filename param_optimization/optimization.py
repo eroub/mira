@@ -1,7 +1,10 @@
-import random
+import sys, os
+sys.path.append(os.getcwd())
+
 import pandas as pd
 import numpy as np
 import math
+import helpers.analysis as analysis
 from collections import Counter
 from tqdm import tqdm
 from scipy.stats import t
@@ -12,18 +15,23 @@ from helpers.preprocessing import process_from_parquet
 # Global Variables
 num_files = 21
 check_num = 1
-num_hours = 6
-tries = 1000
+num_hours = 3
+tries = 100
 # Model Variables
-genetic_res = [[2,0,1],[3,0,1],[1,0,3],[1,0,1],[3,0,0],[0,2,1],[3,0,3],[0,1,1],[2,0,0],[1,0,0]]
+# 
+genetic_res_mean_median = [[2,0,1],[3,0,1],[1,0,3],[1,0,1],[3,0,0],[0,2,1],[3,0,3],[0,1,1],[2,0,0],[1,0,0]]
+genetic_res_rmse = [[3,0,2],[0,3,3],[0,1,1],[3,0,1],[0,1,2],[0,2,1],[0,2,0],[0,3,0]]
 
 # Define the prediction algorithm
 def pred_algo(params):
     res, check_data = process_from_parquet(num_files, check_num)
 
-    # Calculate the difference between consecutive closing values
+    # Calculate the difference between consecutive OHLC values
+    res['diff_open'] = res['open'].diff()
+    res['diff_high'] = res['high'].diff()
+    res['diff_low'] = res['low'].diff()
     res['diff_close'] = res['close'].diff()
-    # Drop first value which is NaN
+    # Drop first value which is NaN# Drop first value which is NaN
     res = res.iloc[1:]
 
     # Convert timestamp to datetime format
@@ -32,7 +40,7 @@ def pred_algo(params):
     res['minute'] = res['datetime'].dt.minute
 
     # Specify the AMIRA-GARCH model
-    amira_garch = arch_model(res['diff_close'], vol='GARCH', p=params[0], o=params[1], q=params[2], power=2, dist='t', mean='HAR', x=res[['volume', 'datetime']])
+    amira_garch = arch_model(res['diff_close'], vol='GARCH',p=params[0], o=params[1], q=params[2], power=2, dist='t', mean='HAR', x=res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']])
     # Fit the model
     amira_garch_fit = amira_garch.fit(disp=False)
 
@@ -44,7 +52,7 @@ def pred_algo(params):
     predicted_values = forecast.simulations.values
     pred_mean = forecast.mean.iloc[-1]
     pred_vol = forecast.variance.iloc[-1]
-    # Pass the estimated df to the t distribution
+    # Pass the estimated degrees of freedom to the t distribution
     df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
     dist = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol))
     pred_returns = dist.rvs(size=horizon)
@@ -70,14 +78,14 @@ def pred_algo(params):
     bins = pd.cut(merged_df['timestamp'], num_hours)
     grouped_df = merged_df.groupby(bins)
 
-    # Calculate the mean and median of the residual for each bin
-    merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
-    grouped_df = merged_df.groupby(bins)
-    agg_stats = grouped_df['residual'].agg(['mean', 'median'])
+    # Calculate the directional accurancy 
+    # merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
+    # grouped_df = merged_df.groupby(bins)
+    # agg_stats = grouped_df['residual'].agg(['mean', 'median'])
 
-    residual_average = np.mean(np.abs(agg_stats['median'].values))
+    # residual_average = np.mean(np.abs(agg_stats['median'].values))
 
-    return residual_average
+    return analysis.directional_accuracy(merged_df['close'], merged_df['pred_price'])
 
 result_dict = {}
 for param in tqdm(genetic_res):
@@ -95,5 +103,5 @@ for param in tqdm(genetic_res):
     # Aferward average residual array and push results onto result_dict
     result_dict[str(param)] = sum(arr)/len(arr)
 
-sorted_d = sorted(result_dict.items(), key=lambda x: x[1], reverse=False)
+sorted_d = sorted(result_dict.items(), key=lambda x: x[1], reverse=True)
 print(sorted_d)

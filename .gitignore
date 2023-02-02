@@ -1,5 +1,5 @@
+.env
+.DS.STORE
 __pycache__/
 daily_data/
-.env
 helpers/*.parquet
-.DS.STORE

@@ -1,6 +1,5 @@
-import glob
-import random
 import matplotlib.pyplot as plt
+import math
 import pandas as pd
 import numpy as np
 import helpers.analysis as analysis
@@ -22,9 +21,12 @@ power = [0,1,2]
 
 res, check_data = process_from_parquet(num_files, check_num)
 
-# Calculate the difference between consecutive closing values
+# Calculate the difference between consecutive OHLC values
+res['diff_open'] = res['open'].diff()
+res['diff_high'] = res['high'].diff()
+res['diff_low'] = res['low'].diff()
 res['diff_close'] = res['close'].diff()
-# Drop first value which is NaN
+# Drop first value which is NaN# Drop first value which is NaN
 res = res.iloc[1:]
 
 # Convert timestamp to datetime format
@@ -33,7 +35,7 @@ res['datetime'] = pd.to_datetime(res['timestamp'], unit='ms')
 res['minute'] = res['datetime'].dt.minute
 
 # Specify the AMIRA-GARCH model
-amira_garch = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=power[2], dist='t', mean='HAR', x=res[['volume', 'datetime']])
+amira_garch = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=power[2], dist='t', mean='HAR', x=res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']])
 # Fit the model
 amira_garch_fit = amira_garch.fit(disp=False)
 
@@ -80,12 +82,12 @@ merged_df['residual'] = (merged_df['pred_price'] - merged_df['close']) ** 2
 grouped_df = merged_df.groupby(bins)
 agg_stats = grouped_df['residual'].agg(['mean', 'median'])
 agg_stats['rmse'] = np.sqrt(agg_stats['mean'])
-
 print("Root Mean Squared Error: ", agg_stats['rmse'].values)
-print("Residual Medians: ", agg_stats['rmse'].values)
 
-pred_time = ((merged_df['timestamp'].max() - merged_df['timestamp'].min()) / 1000) / 3600
-print("Time: {:.2f}H".format(pred_time))
+# Also calculate the directional accuracy
+# print(analysis.directional_accuracy(merged_df['close'], merged_df['pred_price']))
+print(len(merged_df))
+print(analysis.directional_accuracy_bins(merged_df, math.floor(math.sqrt(len(merged_df)))))
 
 # Compute the standard deviation for the predictions
 std = pred_vol * np.sqrt(horizon)
