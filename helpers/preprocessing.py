@@ -67,3 +67,31 @@ def process_from_parquet(num_days, num_check_days):
     check_data = df.loc[(df['timestamp'] >= start_timestamp) & (df['timestamp'] < end_timestamp),:]
 
     return model_data, check_data
+
+def process_from_parquet_step(num_days, num_check_days, num_steps):
+    # Read in the parquet file
+    df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
+
+    # Get the max_index allowed by leaving enough room for the num_check_days
+    last_timestamp = df['timestamp'].iloc[-1]
+    max_index = df[df['timestamp'] < (last_timestamp - num_check_days*86400*1000)].index[-1]
+    random_index = random.randint(0, max_index)
+
+    results = []
+    for i in range(num_steps):
+        # Get the timestamp of the random index
+        random_timestamp = df.loc[random_index, 'timestamp'].values[0]
+
+        # Filter the dataframe based on timestamp for model_data
+        end_timestamp = random_timestamp + num_days*86400*1000
+        model_data = df.loc[(df['timestamp'] >= random_timestamp) & (df['timestamp'] < end_timestamp),:]
+
+        # Filter the dataframe based on timestamp for check_data
+        start_timestamp = end_timestamp
+        end_timestamp = start_timestamp + num_check_days*86400*1000
+        check_data = df.loc[(df['timestamp'] >= start_timestamp) & (df['timestamp'] < end_timestamp),:]
+
+        results.append((model_data, check_data))
+        random_index += 1
+
+    return results

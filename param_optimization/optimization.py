@@ -94,11 +94,11 @@ result_dict = {}
 print("What sort of optimization?")
 opt_type = int(input("0: Directional Accuracy - 1: Root Mean Square Error"))
 if opt_type != 1 and opt_type != 0: exit()
-for param in tqdm(genetic_res_rmse):
+for param in tqdm(genetic_res_da):
     i = 0
     arr = []
     while i < tries:
-        residual = pred_algo(param)
+        residual = pred_algo(param, opt_type)
         # If residual is wack result try again
         if residual == 0 or residual is None or math.isnan(residual):
             continue

@@ -3,3 +3,4 @@
 __pycache__/
 daily_data/
 helpers/*.parquet
+temp.py

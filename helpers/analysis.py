@@ -39,3 +39,17 @@ def mse(merged_df):
 def mape(merged_df):
     residual = np.abs((merged_df['pred_price'] - merged_df['close']) / merged_df['close'])
     return np.mean(residual) * 100
+
+def standard_deviation(horizon, pred_vol, pred_mean, confidence, nu, t):
+    # Compute the standard deviation for the predictions
+    std = pred_vol * np.sqrt(horizon)
+    # Calculate critical value
+    k = nu
+    alpha = confidence
+    critical_value = t.ppf(1 - alpha / 2, k)
+    # Compute the lower and upper bounds of the confidence interval
+    lower_bound = (pred_mean - critical_value * std) / 1000
+    upper_bound = (pred_mean + critical_value * std) / 1000
+    # Print the lower and upper bounds of the confidence interval
+    print("Lower bound of the confidence interval: {:.2f}%".format(lower_bound.iloc[-1]))
+    print("Upper bound of the confidence interval: {:.2f}%".format(upper_bound.iloc[-1]))

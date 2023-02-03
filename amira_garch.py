@@ -17,8 +17,8 @@ num_hours = 3
 p_symmetric_lag = [0,1,2,3]
 o_asymmetric_lag = [0,1,2,3]
 q_volatility_lag = [0,1,2,3]
-power = [0,1,2]
 
+# Get the data
 res, check_data = process_from_parquet(num_files, check_num)
 
 # Calculate the difference between consecutive OHLC values
@@ -29,16 +29,13 @@ res['diff_close'] = res['close'].diff()
 # Drop first value which is NaN# Drop first value which is NaN
 res = res.iloc[1:]
 
-# Convert timestamp to datetime format
+# Convert timestamp to datetime format and then extract the minutes
 res['datetime'] = pd.to_datetime(res['timestamp'], unit='ms')
-# Extract minute of the day from datetime
-res['minute'] = res['datetime'].dt.minute
 
-# Specify the AMIRA-GARCH model
-amira_garch = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=power[2], dist='t', mean='HAR', x=res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']])
-# Fit the model
-amira_garch_fit = amira_garch.fit(disp=False)
-
+# Specify the AMIRA-GARCH model and fit it
+exogenous = res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']]
+# exogenous = res[['volume', 'datetime']]
+amira_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
 # Print the model summary
 # print(amira_garch_fit.summary())
 
@@ -47,14 +44,11 @@ horizon = int((len(res) / num_files) / num_hours)
 
 # Generate predictions for the next 'horizon' time steps
 forecast = amira_garch_fit.forecast(horizon=horizon, simulations=1000)
-predicted_values = forecast.simulations.values
 pred_mean = forecast.mean.iloc[-1]
 pred_vol = forecast.variance.iloc[-1]
-# Pass the estimated df to the t distribution
-# df = (len(res['diff_close'])-1) * (np.var(res['diff_close']) + (np.mean(res['diff_close'])-0)**2)/(np.var(res['diff_close'])/(len(res['diff_close'])-1) + (np.mean(res['diff_close'])-0)**2)
+# Pass the estimated degrees of freedom to the t distribution
 df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
-dist = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol))
-pred_returns = dist.rvs(size=horizon)
+pred_returns = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol)).rvs(size=horizon)
 pred_price = res['close'].iloc[-1] + pred_returns.cumsum()
 
 # Create a new x-axis that starts where the historical x-axis ends
@@ -90,17 +84,7 @@ print(len(merged_df))
 print(analysis.directional_accuracy_bins(merged_df, math.floor(math.sqrt(len(merged_df)))))
 
 # Compute the standard deviation for the predictions
-std = pred_vol * np.sqrt(horizon)
-# Calculate critical value
-k = amira_garch_fit.params['nu']
-alpha = 0.05
-critical_value = t.ppf(1 - alpha / 2, k)
-# Compute the lower and upper bounds of the confidence interval
-lower_bound = (pred_mean - critical_value * std) / 1000
-upper_bound = (pred_mean + critical_value * std) / 1000
-# Print the lower and upper bounds of the confidence interval
-print("Lower bound of the confidence interval: {:.2f}%".format(lower_bound.iloc[-1]))
-print("Upper bound of the confidence interval: {:.2f}%".format(upper_bound.iloc[-1]))
+analysis.standard_deviation(horizon, pred_vol, pred_mean, 0.05, amira_garch_fit.params['nu'], t)
 
 # Select the last tenth of the historical data
 last_twentieth_data = res.iloc[-(res.shape[0]//20):]
