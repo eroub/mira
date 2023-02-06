@@ -11,8 +11,8 @@ from helpers.preprocessing import process_from_parquet_step
 # Global Variables
 num_files = 21
 check_num = 1
-num_hours = 3
-num_steps = 3
+num_hours = 2
+num_steps = 5
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
 p_symmetric_lag = [0,1,2,3]
@@ -21,13 +21,13 @@ q_volatility_lag = [0,1,2,3]
 
 # Get the data
 merged_df_list = []
-last_twentieth_data_list = []
+sectioned_data_list = []
 results = process_from_parquet_step(num_files, check_num, num_steps)
 for i, (model_data, check_data) in enumerate(results):
     locals()[f"model_data_{i+1}"] = model_data
     locals()[f"check_data_{i+1}"] = check_data
 
-for i in range(1, 4):
+for i in range(1, num_steps+1):
     model_data = eval(f"model_data_{i}")
     check_data = eval(f"check_data_{i}")
     # Calculate the difference between consecutive OHLC values
@@ -51,7 +51,12 @@ for i in range(1, 4):
     forecast = amira_garch_fit.forecast(horizon=horizon, simulations=1000)
     pred_mean = forecast.mean.iloc[-1]
     pred_vol = forecast.variance.iloc[-1]
-    
+
+    print(f"---{i} MEAN---")
+    print(pred_mean)
+    print(f"---{i} VOL---")
+    print(pred_vol)
+
     # Pass the estimated degrees of freedom to the t distribution
     df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
     pred_returns = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol)).rvs(size=horizon)
@@ -73,29 +78,29 @@ for i in range(1, 4):
         truncate_time = start_time + num_hours * 3600 * 1000
         merged_df = merged_df.loc[merged_df['timestamp'] <= truncate_time]
 
-    # Select the last tenth of the historical data
-    last_twentieth_data = res.iloc[-(res.shape[0]//20):]
+    # Select the last section of the historical data
+    sectioned_data = res.iloc[-(res.shape[0]//30):]
 
-    # Save merged_df and last_twentieth_data
+    # Save merged_df and sectioned_data
     merged_df_list.append(merged_df)
-    last_twentieth_data_list.append(last_twentieth_data)
+    sectioned_data_list.append(sectioned_data)
 
 # Create a figure with three subplots
-fig, axs = plt.subplots(3, figsize=(10, 15), sharex=True, sharey=True)
+fig, axs = plt.subplots(num_steps, figsize=(10, 15), sharex=True, sharey=True)
 
-for i, (merged_df, last_twentieth_data, ax) in enumerate(zip(merged_df_list, last_twentieth_data_list, axs)):
+for i, (merged_df, sectioned_data, ax) in enumerate(zip(merged_df_list, sectioned_data_list, axs)):
     # Plot the historical prices
-    ax.plot(last_twentieth_data['timestamp'], last_twentieth_data['close'], label='Historical Prices')
+    ax.plot(sectioned_data['timestamp'], sectioned_data['close'], label='Historical Prices')
     # Plot the predicted prices
     ax.plot(merged_df['timestamp'], merged_df['pred_price'], label='Predicted Prices')
     # Plot the actual prices
     ax.plot(merged_df['timestamp'], merged_df['close'], label='Actual Prices', linestyle='dashed')
     # Add labels and legends
-    ax.set_xlabel('Time')
+    # ax.set_xlabel('Time')
     ax.set_ylabel('Price')
     ax.legend()
     # Set the title of each subplot
-    ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
+    # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
 
 # Adjust the subplot spacing
 fig.tight_layout()

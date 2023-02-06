@@ -1,7 +1,8 @@
 import os
+import threading
 import numpy as np
-import fbm
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 from dotenv import load_dotenv
 from datetime import datetime
 from pybit import usdt_perpetual
@@ -26,7 +27,31 @@ prices = []
 volumes = []
 res = np.zeros(shape=(1,), dtype=[('date', 'datetime64[ms]'), ('open', 'f8'), ('high', 'f8'), ('low', 'f8'), ('close', 'f8'), ('volume', 'f8')])
 
-def handle_message(message):
+# Graph variables
+fig, ax = plt.subplots()
+line, = ax.plot([], [], lw=2)
+
+def create_plot():
+    global res
+    # Plotting res['close']
+    fig, ax = plt.subplots()
+    line, = ax.plot(res['date'], res['close'], lw=2)
+    plt.title("Closing Price")
+    plt.xlabel("Time")
+    plt.ylabel("Price (USDT)")
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+# Show chart
+def update_plot(num):
+    line.set_data(times[:num], res['close'][:num])
+    ax.relim()
+    ax.autoscale_view()
+    return line
+
+def handle_trade(message):
     global it, times, prices, volumes, res
     trades = message["data"]
     new_trades = [[trade["timestamp"], float(trade["price"]), trade["size"]] for trade in trades]
@@ -48,18 +73,23 @@ def handle_message(message):
             res[it][4] = prices[i-1]                       # close
             res[it][5] = np.sum(volumes[i-frequency:i])    # volume
             it += 1
+
+        print(res)
+        # Plotting res['close']
+        create_plot()
+        
         it = 0
         times.clear()
         prices.clear()
         volumes.clear()
-    return handle_message
 
-# Generate FBM samples
-hurst_exponent = 0.5
-fbm_samples = fbm.fbm(n=len(close_prices), hurst=hurst_exponent, length=len(close_prices), method='daviesharte')
+def run_ws():
+    ws_linear.start()
 
-# Subscribe to BTCUSDT
-ws_linear.trade_stream(handle_message, "BTCUSDT")
+def stop_ws():
+    ws_linear.stop()
 
-while True:
-    sleep(1)
+if __name__ == '__main__':
+    # Subscribe to BTCUSDT
+    ws_linear.trade_stream(handle_trade, "BTCUSDT")
+    plt.show()
