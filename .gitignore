@@ -2,5 +2,5 @@
 .DS.STORE
 __pycache__/
 daily_data/
-helpers/*.parquet
+*.parquet
 temp.py

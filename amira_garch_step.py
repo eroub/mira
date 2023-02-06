@@ -11,7 +11,7 @@ from helpers.preprocessing import process_from_parquet_step
 # Global Variables
 num_files = 21
 check_num = 1
-num_hours = 2
+num_hours = 6
 num_steps = 5
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
