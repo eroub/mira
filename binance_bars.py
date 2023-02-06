@@ -5,7 +5,7 @@ import numpy as np
 from datetime import datetime
 
 # Global Variables
-frequency = 20
+frequency = 200
 bars = []
 bar = np.empty(6)
 times = np.array([], dtype=np.datetime64)
@@ -22,12 +22,8 @@ async def handle_trade(trade):
         # Calculate OHLC and add to numpy array
         prices = np.array(prices, dtype=float)
         ohlc = np.array([prices[0], np.amax(prices), np.amin(prices), prices[-1]])
-        bar = np.concatenate((np.array([times[0]], ndmin=1), ohlc, np.array([np.sum(volumes)], dtype=float, ndmin=1)))
+        bar = np.concatenate((np.array([times[0].astype(object)], ndmin=1), ohlc, np.array([np.sum(np.array(volumes, dtype=float))], dtype=float, ndmin=1)))
         bars.append(bar)
-        print(bar)
-        if(len(bars) > 3): 
-            print(bars)
-            exit()
         # Reset indices and arrays storing trade data
         times = np.array([], dtype=np.datetime64)
         prices = np.array([], dtype=float)
