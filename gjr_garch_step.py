@@ -1,18 +1,25 @@
+import argparse
+import math
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from arch import arch_model
 from arch.__future__ import reindexing
 from scipy.stats import t
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from helpers.preprocessing import process_from_parquet_step
 
 # Global Variables
 num_files = 21
 check_num = 1
 num_hours = 6
-num_steps = 5
+
+# Get num_steps from argument provided, otherwise default to 10
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-steps", type=int, default=10, help="number of steps")
+args = parser.parse_args()
+
+num_steps = args.num_steps
+
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
 p_symmetric_lag = [0,1,2,3]
@@ -86,23 +93,34 @@ for i in range(1, num_steps+1):
     merged_df_list.append(merged_df)
     sectioned_data_list.append(sectioned_data)
 
-# Create a figure with three subplots
-fig, axs = plt.subplots(num_steps, figsize=(10, 15), sharex=True, sharey=True)
+# Create a figure with num_steps subplots
+cols = math.ceil(num_steps / 5)
+fig, axs = plt.subplots(5, cols, figsize=(10, 15), sharex=True, sharey=True)
+axs = axs.flatten()
+
+# Create a separate axis for the legend
+legend_ax = fig.add_subplot(111, frameon=False)
+legend_ax.set_axis_off()
 
 for i, (merged_df, sectioned_data, ax) in enumerate(zip(merged_df_list, sectioned_data_list, axs)):
-    # Plot the historical prices
-    ax.plot(sectioned_data['timestamp'], sectioned_data['close'], label='Historical Prices')
-    # Plot the predicted prices
-    ax.plot(merged_df['timestamp'], merged_df['pred_price'], label='Predicted Prices')
-    # Plot the actual prices
-    ax.plot(merged_df['timestamp'], merged_df['close'], label='Actual Prices', linestyle='dashed')
-    # Add labels and legends
-    # ax.set_xlabel('Time')
-    ax.set_ylabel('Price')
-    ax.legend()
-    # Set the title of each subplot
-    # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
+    if i < num_steps:
+        # Plot the historical prices
+        ax.plot(sectioned_data['timestamp'], sectioned_data['close'], label='Historical Prices')
+        # Plot the predicted prices
+        ax.plot(merged_df['timestamp'], merged_df['pred_price'], label='Predicted Prices')
+        # Plot the actual prices
+        ax.plot(merged_df['timestamp'], merged_df['close'], label='Actual Prices', linestyle='dashed')
+        # Add labels and legends
+        # ax.set_xlabel('Time')
+        ax.set_ylabel('Price')
+        # Set the title of each subplot
+        # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
+    else:
+        # Remove the unused subplots
+        ax.remove()
 
+# Add the legend to the separate axis
+legend_ax.legend(*axs[0].get_legend_handles_labels(), loc='upper left', ncol=3)
 # Adjust the subplot spacing
 fig.tight_layout()
 # Show the plot
