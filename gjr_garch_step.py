@@ -20,6 +20,7 @@ num_steps = args.num_steps
 num_files = args.num_files
 check_num = args.check_num
 num_hours = args.num_hours
+num_price_gens = 1
 
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
@@ -60,15 +61,14 @@ for i in range(1, num_steps+1):
     pred_mean = forecast.mean.iloc[-1]
     pred_vol = forecast.variance.iloc[-1]
 
-    print(f"---{i} MEAN---")
-    print(pred_mean)
-    print(f"---{i} VOL---")
-    print(pred_vol)
-
-    # Pass the estimated degrees of freedom to the t distribution
+    # Pass the estimated degrees of freedom to the t distribution x times
     df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
-    pred_returns = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol)).rvs(size=horizon)
-    pred_price = res['close'].iloc[-1] + pred_returns.cumsum()
+    simulated_prices = []
+    for i in range(num_price_gens):
+        pred_returns = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol)).rvs(size=horizon)
+        simulated_prices.append(res['close'].iloc[-1] + pred_returns.cumsum())
+
+    pred_price = np.mean(simulated_prices, axis=0)
 
     # Create a new x-axis that starts where the historical x-axis ends
     x_pred = res['timestamp'].iloc[-1] + np.arange(1, len(pred_price) + 1) * (res['timestamp'].iloc[-1] - res['timestamp'].iloc[-2])
