@@ -8,17 +8,18 @@ from arch.__future__ import reindexing
 from scipy.stats import t
 from helpers.preprocessing import process_from_parquet_step
 
-# Global Variables
-num_files = 21
-check_num = 1
-num_hours = 6
-
-# Get num_steps from argument provided, otherwise default to 10
+# Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--num-steps", type=int, default=10, help="number of steps")
+parser.add_argument("--num-files", type=int, default=21, help="number of input data files")
+parser.add_argument("--check-num", type=int, default=21, help="number of check data files")
+parser.add_argument("--num-hours", type=int, default=6, help="number of hours to check predicted vs actual data against")
 args = parser.parse_args()
-
+# Global Variables
 num_steps = args.num_steps
+num_files = args.num_files
+check_num = args.check_num
+num_hours = args.num_hours
 
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
