@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
-import math
 import pandas as pd
 import numpy as np
-import helpers.analysis as analysis
-from scipy.stats import t
 from arch import arch_model
 from arch.__future__ import reindexing
+from scipy.stats import t
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from helpers.preprocessing import process_from_parquet_step
 
 # Global Variables
@@ -40,15 +40,15 @@ for i in range(1, num_steps+1):
     res = res.iloc[1:]
     res['datetime'] = pd.to_datetime(res['timestamp'], unit='ms')
 
-    # Specify the AMIRA-GARCH model and fit it
+    # Specify the GJR-GARCH model and fit it
     exogenous = res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']]
-    amira_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
+    gjr_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
 
-    # Determine the length of half a day in terms of the time steps of your dataset
+     # Determine the length of half a day in terms of the time steps of your dataset
     horizon = int((len(res) / num_files) / num_hours)
 
     # Generate predictions for the next 'horizon' time steps
-    forecast = amira_garch_fit.forecast(horizon=horizon, simulations=1000)
+    forecast = gjr_garch_fit.forecast(horizon=horizon, simulations=1000)
     pred_mean = forecast.mean.iloc[-1]
     pred_vol = forecast.variance.iloc[-1]
 
@@ -72,6 +72,7 @@ for i in range(1, num_steps+1):
     start_time = merged_df.iloc[0]['timestamp']
     end_time = merged_df.iloc[-1]['timestamp']
     time_diff = (end_time - start_time) / (3600 * 1000)
+
 
     # Truncate the dataframe such that it only has timestamps within 'num_hours' hours from the first one
     if time_diff > num_hours:

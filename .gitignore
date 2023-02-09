@@ -4,3 +4,4 @@ __pycache__/
 daily_data/
 *.parquet
 temp.py
+.vscode/
