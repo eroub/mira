@@ -1,3 +1,4 @@
+import datetime
 import random
 import pandas as pd
 import os
@@ -48,14 +49,21 @@ def grab_data(sample_file_names, frequency):
 def process_from_parquet(num_days, num_check_days):
     # Read in the parquet file
     df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
+    df = df.sort_values(by='timestamp')
+    df = df.reset_index(drop=True)
 
-    # Get the max_index allowed by leaving enough room for the num_check_days
+        # Get the max_index allowed by leaving enough room for the num_check_days
     last_timestamp = df['timestamp'].iloc[-1]
-    max_index = df[df['timestamp'] < (last_timestamp - num_check_days*86400*1000)].index[-1]
-    random_index = random.randint(0, max_index)
+    max_timestamp = last_timestamp - num_check_days * 86400 * 1000
+    # Find the max_index by searching for the first timestamp that is greater than max_timestamp
+    for i, timestamp in enumerate(df['timestamp'].values):
+        if timestamp > max_timestamp:
+            max_index = i - 1
+            break
+    random_index = random.randint(0, min(max_index, len(df) - 1))
 
     # Get the timestamp of the random index
-    random_timestamp = df.loc[random_index, 'timestamp'].values[0]
+    random_timestamp = df.loc[random_index, 'timestamp']
     
     # Filter the dataframe based on timestamp for model_data
     end_timestamp = random_timestamp + num_days*86400*1000
@@ -71,16 +79,23 @@ def process_from_parquet(num_days, num_check_days):
 def process_from_parquet_step(num_days, num_check_days, num_steps):
     # Read in the parquet file
     df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
+    df = df.sort_values(by='timestamp')
+    df = df.reset_index(drop=True)
 
     # Get the max_index allowed by leaving enough room for the num_check_days
     last_timestamp = df['timestamp'].iloc[-1]
-    max_index = df[df['timestamp'] < (last_timestamp - num_check_days*86400*1000)].index[-1]
-    random_index = random.randint(0, max_index)
-
+    max_timestamp = last_timestamp - num_check_days * 86400 * 1000
+    # Find the max_index by searching for the first timestamp that is greater than max_timestamp
+    for i, timestamp in enumerate(df['timestamp'].values):
+        if timestamp > max_timestamp:
+            max_index = i - 1
+            break
+    random_index = random.randint(0, min(max_index, len(df) - 1))
+    
     results = []
     for i in range(num_steps):
         # Get the timestamp of the random index
-        random_timestamp = df.loc[random_index, 'timestamp'].values[0]
+        random_timestamp = df.loc[random_index, 'timestamp']
 
         # Filter the dataframe based on timestamp for model_data
         end_timestamp = random_timestamp + num_days*86400*1000

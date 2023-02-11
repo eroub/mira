@@ -1,18 +1,19 @@
 import argparse
 import math
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from arch import arch_model
 from arch.__future__ import reindexing
-from scipy.stats import t
 from helpers.preprocessing import process_from_parquet_step
+from scipy.stats import t
 
 # Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--num-steps", type=int, default=10, help="number of steps")
 parser.add_argument("--num-files", type=int, default=21, help="number of input data files")
-parser.add_argument("--check-num", type=int, default=21, help="number of check data files")
+parser.add_argument("--check-num", type=int, default=2, help="number of check data files")
 parser.add_argument("--num-hours", type=int, default=6, help="number of hours to check predicted vs actual data against")
 args = parser.parse_args()
 # Global Variables
@@ -54,7 +55,8 @@ for i in range(1, num_steps+1):
     gjr_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
 
      # Determine the length of half a day in terms of the time steps of your dataset
-    horizon = int((len(res) / num_files) / num_hours)
+    # horizon = int((len(res) / num_files) / num_hours)
+    horizon = 10000
 
     # Generate predictions for the next 'horizon' time steps
     forecast = gjr_garch_fit.forecast(horizon=horizon, simulations=1000)
@@ -81,7 +83,6 @@ for i in range(1, num_steps+1):
     end_time = merged_df.iloc[-1]['timestamp']
     time_diff = (end_time - start_time) / (3600 * 1000)
 
-
     # Truncate the dataframe such that it only has timestamps within 'num_hours' hours from the first one
     if time_diff > num_hours:
         truncate_time = start_time + num_hours * 3600 * 1000
@@ -105,12 +106,24 @@ legend_ax.set_axis_off()
 
 for i, (merged_df, sectioned_data, ax) in enumerate(zip(merged_df_list, sectioned_data_list, axs)):
     if i < num_steps:
+        # Convert the timestamps from milliseconds to hours datetime format
+        sectioned_data['datetime'] = pd.to_datetime(sectioned_data['timestamp']/3600000, unit='h')
+        merged_df['datetime'] = pd.to_datetime(merged_df['timestamp']/3600000, unit='h')
+        # Get all the unique dates in the datetime column
+        unique_dates = np.unique(merged_df['datetime'].dt.date)
+
+        for date in unique_dates:
+            # Find the exact time of midnight for each date
+            midnight = pd.Timestamp(date).replace(hour=0, minute=0, second=0)
+            # Add a vertical line at midnight for each date
+            ax.axvline(midnight, color='black', linestyle='dotted')
+
         # Plot the historical prices
-        ax.plot(sectioned_data['timestamp'], sectioned_data['close'], label='Historical Prices')
+        ax.plot(sectioned_data['datetime'], sectioned_data['close'], label='Historical Prices')
         # Plot the predicted prices
-        ax.plot(merged_df['timestamp'], merged_df['pred_price'], label='Predicted Prices')
+        ax.plot(merged_df['datetime'], merged_df['pred_price'], label='Predicted Prices')
         # Plot the actual prices
-        ax.plot(merged_df['timestamp'], merged_df['close'], label='Actual Prices', linestyle='dashed')
+        ax.plot(merged_df['datetime'], merged_df['close'], label='Actual Prices', linestyle='dashed')
         # Add labels and legends
         # ax.set_xlabel('Time')
         ax.set_ylabel('Price')
@@ -120,6 +133,8 @@ for i, (merged_df, sectioned_data, ax) in enumerate(zip(merged_df_list, sectione
         # Remove the unused subplots
         ax.remove()
 
+# Show date underneath last subplot
+axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%d-%m-%Y\n%H:%M:%S'))
 # Add the legend to the separate axis
 legend_ax.legend(*axs[0].get_legend_handles_labels(), loc='upper left', ncol=3)
 # Adjust the subplot spacing
