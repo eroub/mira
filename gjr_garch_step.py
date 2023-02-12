@@ -21,75 +21,52 @@ num_steps = args.num_steps
 num_files = args.num_files
 check_num = args.check_num
 num_hours = args.num_hours
-num_price_gens = 1
 
 # Model Variables
 # According to my testing the best parameters for BTC 200 tick data is [0,2,1,2]
-p_symmetric_lag = [0,1,2,3]
-o_asymmetric_lag = [0,1,2,3]
-q_volatility_lag = [0,1,2,3]
+params = [0,1,2,3]
+nth_data = 30
 
-# Get the data
+# Init lists
 merged_df_list = []
 sectioned_data_list = []
+# Get the data
 results = process_from_parquet_step(num_files, check_num, num_steps)
 for i, (model_data, check_data) in enumerate(results):
-    locals()[f"model_data_{i+1}"] = model_data
-    locals()[f"check_data_{i+1}"] = check_data
+    res = model_data.copy().iloc[1:].assign(
+        diff_open=model_data['open'].diff(),
+        diff_high=model_data['high'].diff(),
+        diff_low=model_data['low'].diff(),
+        diff_close=model_data['close'].diff(),
+        datetime=pd.to_datetime(model_data['timestamp'], unit='ms')
+    )
 
-for i in range(1, num_steps+1):
-    model_data = eval(f"model_data_{i}")
-    check_data = eval(f"check_data_{i}")
-    # Calculate the difference between consecutive OHLC values
-    res = model_data.copy()
-    res['diff_open'] = res['open'].diff()
-    res['diff_high'] = res['high'].diff()
-    res['diff_low'] = res['low'].diff()
-    res['diff_close'] = res['close'].diff()
-    # Drop first value which is NaN and convert timestamp to datetime format
-    res = res.iloc[1:]
-    res['datetime'] = pd.to_datetime(res['timestamp'], unit='ms')
-
-    # Specify the GJR-GARCH model and fit it
+    # Specify and fit the GJR-GARCH model
     exogenous = res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']]
-    gjr_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=p_symmetric_lag[0], o=o_asymmetric_lag[2], q=q_volatility_lag[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
+    gjr_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=params[0], o=params[2], q=params[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
 
-     # Determine the length of half a day in terms of the time steps of your dataset
-    # horizon = int((len(res) / num_files) / num_hours)
-    horizon = 10000
-
-    # Generate predictions for the next 'horizon' time steps
+    # Generate predictions
+    horizon = int((len(res) / num_files) / num_hours)
     forecast = gjr_garch_fit.forecast(horizon=horizon, simulations=1000)
-    pred_mean = forecast.mean.iloc[-1]
-    pred_vol = forecast.variance.iloc[-1]
-
-    # Pass the estimated degrees of freedom to the t distribution x times
     df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
-    simulated_prices = []
-    for i in range(num_price_gens):
-        pred_returns = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol)).rvs(size=horizon)
-        simulated_prices.append(res['close'].iloc[-1] + pred_returns.cumsum())
-
-    pred_price = np.mean(simulated_prices, axis=0)
-
-    # Create a new x-axis that starts where the historical x-axis ends
-    x_pred = res['timestamp'].iloc[-1] + np.arange(1, len(pred_price) + 1) * (res['timestamp'].iloc[-1] - res['timestamp'].iloc[-2])
-
-    # Create data frame from the pred_price and x_pred
-    data = {'pred_price': pred_price, 'timestamp': x_pred}
-    pred_df = pd.DataFrame(data)
-    merged_df = pd.merge_asof(pred_df, check_data[['close', 'timestamp']], on='timestamp', direction='nearest', tolerance=15000).dropna().reset_index()
-    start_time = merged_df.iloc[0]['timestamp']
-    end_time = merged_df.iloc[-1]['timestamp']
-    time_diff = (end_time - start_time) / (3600 * 1000)
+    while True:
+        pred_returns = t(df=df, loc=forecast.mean.iloc[-1], scale=np.sqrt(forecast.variance.iloc[-1])).rvs(size=horizon)
+        pred_price = res['close'].iloc[-1] + pred_returns.cumsum()
+        pred_df = pd.DataFrame({
+            'pred_price': pred_price, 
+            'timestamp': res['timestamp'].iloc[-1] + np.arange(1, len(pred_price) + 1) * (res['timestamp'].iloc[-1] - res['timestamp'].iloc[-2])
+        })
+        merged_df = pd.merge_asof(pred_df, check_data[['close', 'timestamp']], on='timestamp', direction='nearest', tolerance=15000).dropna().reset_index()
+        if(len(merged_df) > 0): break
 
     # Truncate the dataframe such that it only has timestamps within 'num_hours' hours from the first one
+    time_diff = (merged_df.iloc[-1]['timestamp'] - merged_df.iloc[0]['timestamp']) / (3600 * 1000)
     if time_diff > num_hours:
-        truncate_time = start_time + num_hours * 3600 * 1000
+        truncate_time = merged_df.iloc[0]['timestamp'] + num_hours * 3600 * 1000
         merged_df = merged_df.loc[merged_df['timestamp'] <= truncate_time]
 
-    # Select the last section of the historical data
-    sectioned_data = res.iloc[-(res.shape[0]//30):]
+    # Select the last nth section of the historical data
+    sectioned_data = res.iloc[-(res.shape[0]//nth_data):]
 
     # Save merged_df and sectioned_data
     merged_df_list.append(merged_df)
@@ -100,43 +77,37 @@ cols = math.ceil(num_steps / 5)
 fig, axs = plt.subplots(5, cols, figsize=(10, 15), sharex=True, sharey=True)
 axs = axs.flatten()
 
-# Create a separate axis for the legend
-legend_ax = fig.add_subplot(111, frameon=False)
-legend_ax.set_axis_off()
-
+# Iterate through the data and subplots and populate them
 for i, (merged_df, sectioned_data, ax) in enumerate(zip(merged_df_list, sectioned_data_list, axs)):
-    if i < num_steps:
-        # Convert the timestamps from milliseconds to hours datetime format
-        sectioned_data['datetime'] = pd.to_datetime(sectioned_data['timestamp']/3600000, unit='h')
-        merged_df['datetime'] = pd.to_datetime(merged_df['timestamp']/3600000, unit='h')
-        # Get all the unique dates in the datetime column
-        unique_dates = np.unique(merged_df['datetime'].dt.date)
-
-        for date in unique_dates:
-            # Find the exact time of midnight for each date
-            midnight = pd.Timestamp(date).replace(hour=0, minute=0, second=0)
-            # Add a vertical line at midnight for each date
-            ax.axvline(midnight, color='black', linestyle='dotted')
-
-        # Plot the historical prices
-        ax.plot(sectioned_data['datetime'], sectioned_data['close'], label='Historical Prices')
-        # Plot the predicted prices
-        ax.plot(merged_df['datetime'], merged_df['pred_price'], label='Predicted Prices')
-        # Plot the actual prices
-        ax.plot(merged_df['datetime'], merged_df['close'], label='Actual Prices', linestyle='dashed')
-        # Add labels and legends
-        # ax.set_xlabel('Time')
-        ax.set_ylabel('Price')
-        # Set the title of each subplot
-        # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
-    else:
-        # Remove the unused subplots
+    if i >= num_steps:
         ax.remove()
-
+        continue
+        
+    # Convert the timestamps from milliseconds to datetime format
+    sectioned_data['datetime'] = pd.to_datetime(sectioned_data['timestamp'], unit='ms')
+    merged_df['datetime'] = pd.to_datetime(merged_df['timestamp'], unit='ms')
+    
+    # Add vertical lines at midnight for each unique date
+    unique_dates = np.unique(merged_df['datetime'].dt.date)
+    for date in unique_dates:
+        midnight = pd.Timestamp(date).replace(hour=0, minute=0, second=0)
+        ax.axvline(midnight, color='black', linestyle='dotted')
+    
+    # Plot the historical prices
+    ax.plot(sectioned_data['datetime'], sectioned_data['close'], label='Historical Prices')
+    # Plot the predicted prices
+    ax.plot(merged_df['datetime'], merged_df['pred_price'], label='Predicted Prices')
+    # Plot the actual prices
+    ax.plot(merged_df['datetime'], merged_df['close'], label='Actual Prices', linestyle='dashed')
+    
+    # Set labels
+    ax.set_ylabel('Price')
+    # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
+    
 # Show date underneath last subplot
 axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%d-%m-%Y\n%H:%M:%S'))
-# Add the legend to the separate axis
-legend_ax.legend(*axs[0].get_legend_handles_labels(), loc='upper left', ncol=3)
+# Add the legend to the figure
+fig.legend(*axs[0].get_legend_handles_labels(), loc='upper left', ncol=3)
 # Adjust the subplot spacing
 fig.tight_layout()
 # Show the plot

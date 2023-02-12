@@ -5,3 +5,4 @@ daily_data/
 *.parquet
 temp.py
 .vscode/
+output.txt

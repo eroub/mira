@@ -16,7 +16,7 @@ from helpers.preprocessing import process_from_parquet
 num_files = 21
 check_num = 1
 num_hours = 3
-tries = 500
+tries = 750
 # Model Variables
 # 
 genetic_res_mean_median = [[2,0,1],[3,0,1],[1,0,3],[1,0,1],[3,0,0],[0,2,1],[3,0,3],[0,1,1],[2,0,0],[1,0,0]]
@@ -26,64 +26,45 @@ genetic_res_da = [[0,3,2],[2,2,0],[0,1,3],[1,3,0],[1,0,0],[0,2,3],[0,3,1],[0,2,1
 # Define the prediction algorithm
 def pred_algo(params, choice):
     res, check_data = process_from_parquet(num_files, check_num)
+    res = res.assign(diff_open=lambda x: x['open'].diff(),
+                    diff_high=lambda x: x['high'].diff(),
+                    diff_low=lambda x: x['low'].diff(),
+                    diff_close=lambda x: x['close'].diff(),
+                    datetime=lambda x: pd.to_datetime(x['timestamp'], unit='ms')
+                    )[1:]
 
-    # Calculate the difference between consecutive OHLC values
-    res['diff_open'] = res['open'].diff()
-    res['diff_high'] = res['high'].diff()
-    res['diff_low'] = res['low'].diff()
-    res['diff_close'] = res['close'].diff()
-    # Drop first value which is NaN# Drop first value which is NaN
-    res = res.iloc[1:]
-
-    # Convert timestamp to datetime format
-    res['datetime'] = pd.to_datetime(res['timestamp'], unit='ms')
-    # Extract minute of the day from datetime
-    res['minute'] = res['datetime'].dt.minute
-
-    # Specify the AMIRA-GARCH model
-    amira_garch = arch_model(res['diff_close'], vol='GARCH',p=params[0], o=params[1], q=params[2], power=2, dist='t', mean='HAR', x=res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']])
-    # Fit the model
-    amira_garch_fit = amira_garch.fit(disp=False)
+    # Specify the GJR-GARCH model and fit it
+    exogenous = res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']]
+    # exogenous = res[['volume', 'datetime']]
+    gjr_garch_fit = arch_model(res['diff_close'], vol='GARCH', p=params[0], o=params[2], q=params[1], power=2, dist='t', mean='HAR', x=exogenous).fit(disp=False)
 
     # Determine the length of half a day in terms of the time steps of your dataset
-    horizon = int((len(res) / num_files) / 2)
+    horizon = int((len(res) / num_files) / num_hours)
 
     # Generate predictions for the next 'horizon' time steps
-    forecast = amira_garch_fit.forecast(horizon=horizon, simulations=1000)
-    predicted_values = forecast.simulations.values
-    pred_mean = forecast.mean.iloc[-1]
-    pred_vol = forecast.variance.iloc[-1]
-    # Pass the estimated degrees of freedom to the t distribution
+    forecast = gjr_garch_fit.forecast(horizon=horizon, simulations=1000)
+    # Calculate degrees of freedom for t distribution
     df = (len(res['close'])-1) * (np.var(res['close']) + (np.mean(res['close'])-0)**2)/(np.var(res['close'])/(len(res['close'])-1) + (np.mean(res['close'])-0)**2)
-    dist = t(df=df, loc=pred_mean, scale=np.sqrt(pred_vol))
-    pred_returns = dist.rvs(size=horizon)
-    pred_price = res['close'].iloc[-1] + pred_returns.cumsum()
+    # Until merged_df returns data successfully generate price predictions
+    while True:
+        # Generate price predictions using t distribution
+        pred_returns = t(df=df, loc=forecast.mean.iloc[-1], scale=np.sqrt(forecast.variance.iloc[-1])).rvs(size=horizon)
+        pred_price = res['close'].iloc[-1] + pred_returns.cumsum()
 
-    # Create a new x-axis that starts where the historical x-axis ends
-    x_pred = res['timestamp'].iloc[-1] + np.arange(1, len(pred_price) + 1) * (res['timestamp'].iloc[-1] - res['timestamp'].iloc[-2])
+        # Create a new x-axis that starts where the historical x-axis ends
+        x_pred = res['timestamp'].iloc[-1] + np.arange(1, len(pred_price) + 1) * (res['timestamp'].iloc[-1] - res['timestamp'].iloc[-2])
 
-    # Create data frame from the pred_price and x_pred
-    data = {'pred_price': pred_price, 'timestamp': x_pred}
-    pred_df = pd.DataFrame(data)
-    merged_df = pd.merge_asof(pred_df, check_data[['close', 'timestamp']], on='timestamp', direction='nearest', tolerance=15000).dropna().reset_index()
-    start_time = merged_df.iloc[0]['timestamp']
-    end_time = merged_df.iloc[-1]['timestamp']
-    time_diff = (end_time - start_time) / (3600 * 1000)
+        # Create data frame from the pred_price and x_pred
+        pred_df = pd.DataFrame({'pred_price': pred_price, 'timestamp': x_pred})
+        merged_df = pd.merge_asof(pred_df, check_data[['close', 'timestamp']], on='timestamp', direction='nearest', tolerance=15000).dropna().reset_index()
+        if(len(merged_df) > 0): break
 
-    # Truncate the dataframe such that it only has timestamps within 6 hours from the first one
+    # Truncate the dataframe such that it only has timestamps within 'num_hours' hours from the first one
+    time_diff = (merged_df.iloc[-1]['timestamp'] - merged_df.iloc[0]['timestamp']) / (3600 * 1000)
     if time_diff > num_hours:
-      truncate_time = start_time + num_hours * 3600 * 1000
-      merged_df = merged_df.loc[merged_df['timestamp'] <= truncate_time]
+        truncate_time = merged_df.iloc[0]['timestamp'] + num_hours * 3600 * 1000
+        merged_df = merged_df.loc[merged_df['timestamp'] <= truncate_time]
 
-    # Group truncated merged dataframe into bins according to the num_hours
-    bins = pd.cut(merged_df['timestamp'], num_hours)
-    grouped_df = merged_df.groupby(bins)
-
-    # Return the averaged median
-    # merged_df['residual'] = ((merged_df['pred_price'] - merged_df['close']) / merged_df['close'] ) * 100
-    # grouped_df = merged_df.groupby(bins)
-    # agg_stats = grouped_df['residual'].agg(['mean', 'median'])
-    # return np.mean(np.abs(agg_stats['median'].values))
     # Return directional accuracy or RSME based on user choice
     if choice == 0:
         return analysis.directional_accuracy(merged_df['close'], merged_df['pred_price'])
