@@ -28,6 +28,8 @@ res = res.assign(diff_open=lambda x: x['open'].diff(),
                  datetime=lambda x: pd.to_datetime(x['timestamp'], unit='ms')
                 )[1:]
 
+print(res['close'])
+
 # Specify the GJR-GARCH model and fit it
 exogenous = res[['volume', 'datetime', 'diff_open', 'diff_high', 'diff_low']]
 # exogenous = res[['volume', 'datetime']]

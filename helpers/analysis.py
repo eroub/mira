@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def directional_accuracy(y_true, y_pred):
     n = len(y_true)
@@ -53,3 +54,14 @@ def standard_deviation(horizon, pred_vol, pred_mean, confidence, nu, t):
     # Print the lower and upper bounds of the confidence interval
     print("Lower bound of the confidence interval: {:.2f}%".format(lower_bound.iloc[-1]))
     print("Upper bound of the confidence interval: {:.2f}%".format(upper_bound.iloc[-1]))
+
+def exponential_moving_average(data, period):
+    ema = data.ewm(span=period, adjust=False).mean()
+    return ema
+
+def bollinger_bands(data, period, num_std):
+    moving_avg = data.rolling(window=period).mean()
+    moving_std = data.rolling(window=period).std()
+    upper_band = moving_avg + num_std * moving_std
+    lower_band = moving_avg - num_std * moving_std    
+    return pd.DataFrame({'upper_band': upper_band, 'moving_avg': moving_avg, 'lower_band': lower_band})
