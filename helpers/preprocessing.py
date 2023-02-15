@@ -46,9 +46,9 @@ def grab_data(sample_file_names, frequency):
         res = pd.concat([res, subset_data], axis=0)
     return res
 
-def process_from_parquet(num_days, num_check_days):
+def process_from_parquet(num_days, num_check_days, frequency=200):
     # Read in the parquet file
-    df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
+    df = pd.read_parquet("{}/helpers/data{}.parquet".format(os.getcwd(), frequency))
     df = df.sort_values(by='timestamp')
     df = df.reset_index(drop=True)
 
@@ -76,9 +76,9 @@ def process_from_parquet(num_days, num_check_days):
 
     return model_data, check_data
 
-def process_from_parquet_step(num_days, num_check_days, num_steps):
+def process_from_parquet_step(num_days, num_check_days, num_steps, frequency=200):
     # Read in the parquet file
-    df = pd.read_parquet("{}/helpers/data200.parquet".format(os.getcwd()))
+    df = pd.read_parquet("{}/helpers/data{}.parquet".format(os.getcwd(), frequency))
     df = df.sort_values(by='timestamp')
     df = df.reset_index(drop=True)
 

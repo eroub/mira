@@ -5,7 +5,7 @@ from helpers.preprocessing import convert_to_tick
 from tqdm import tqdm
 
 # Set desired frequency (num trades to make a tick bar)
-frequency = 200
+frequency = 1000
 
 # Find all of the files with the desired file name format, then sort them
 file_names = sorted(glob.glob("./daily_data/BTCUSDT-trades-*-*-*.csv"))

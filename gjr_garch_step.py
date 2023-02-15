@@ -34,7 +34,6 @@ period = 500
 merged_df_list = []
 sectioned_data_list = []
 bol_list = []
-pred_bol_list = []
 # Get the data
 results = process_from_parquet_step(num_files, check_num, num_steps)
 for i, (model_data, check_data) in enumerate(results):
@@ -78,34 +77,6 @@ for i, (model_data, check_data) in enumerate(results):
     bol = analysis.bollinger_bands(res['close'], period, num_std)
     bol.index = res['datetime']
 
-    # Concatenate the existing log_return data with the predicted data
-    log_return = pd.Series(np.log(res['close'].diff()[1:]), index=res.index[1:])
-    log_return.index = res.index[1:]
-    log_return = log_return.reindex(pred_df.index)
-    combined_data = pd.concat([pred_df], axis=0)
-    combined_data['log_return'] = log_return
-
-    # Calculate the cumulative sum of the log returns for the combined data
-    cumulative_sum = np.exp(combined_data['log_return'].cumsum())
-
-    # Scale the cumulative sum to the last known price
-    scaled_cumulative_sum = cumulative_sum * res['close'].iloc[-1]
-
-    # Calculate the upper and lower bands using the predicted mean and variance
-    upper_band = scaled_cumulative_sum + num_std * np.sqrt(pred_vol)
-    lower_band = scaled_cumulative_sum - num_std * np.sqrt(pred_vol)
-
-    # Calculate the predicted moving average for the combined data
-    pred_moving_avg = combined_data['pred_price'].rolling(window=period).mean()
-
-    # Create dataframe for predicted bollinger bands
-    pred_bol = pd.DataFrame({'upper_band': upper_band, 'moving_avg': pred_moving_avg, 'lower_band': lower_band})
-    pred_bol = pred_bol.iloc[:len(merged_df), :]
-    pred_bol.index = merged_df['datetime']
-
-    print(combined_data['log_return'])
-    print(pred_bol)
-
     # Select the last nth section of the historical dat and ema
     sectioned_data = res.iloc[-(res.shape[0]//nth_data):].copy()
     bol_sectioned = bol.iloc[-(res.shape[0]//nth_data):].copy()
@@ -117,7 +88,6 @@ for i, (model_data, check_data) in enumerate(results):
     merged_df_list.append(merged_df)
     sectioned_data_list.append(sectioned_data)
     bol_list.append(bol_sectioned)
-    pred_bol_list.append(pred_bol)
 
 # Create a figure with num_steps subplots
 cols = math.ceil(num_steps / 5)
@@ -125,7 +95,7 @@ fig, axs = plt.subplots(5, cols, figsize=(10, 15), sharex=True, sharey=True)
 axs = axs.flatten()
 
 # Iterate through the data and subplots and populate them
-for i, (merged_df, sectioned_data, bol, pred_bol, ax) in enumerate(zip(merged_df_list, sectioned_data_list, bol_list, pred_bol_list, axs)):
+for i, (merged_df, sectioned_data, bol, ax) in enumerate(zip(merged_df_list, sectioned_data_list, bol_list, axs)):
     if i >= num_steps:
         ax.remove()
         continue
@@ -139,30 +109,21 @@ for i, (merged_df, sectioned_data, bol, pred_bol, ax) in enumerate(zip(merged_df
     # Plot the historical prices
     ax.plot(sectioned_data['datetime'], sectioned_data['close'], label='Historical Prices')
     # Plot the predicted prices
-    ax.plot(merged_df['datetime'], merged_df['pred_price'], label='Predicted Prices')
+    ax.plot(merged_df['datetime'], merged_df['pred_price'], label='Predicted Prices', linestyle='dashed')
     # Plot the actual prices
-    ax.plot(merged_df['datetime'], merged_df['close'], label='Actual Prices', linestyle='dashed')
+    ax.plot(merged_df['datetime'], merged_df['close'], label='Actual Prices')
     # Plot the bollinger bands
-    ax.plot(sectioned_data['datetime'], bol['upper_band'], linestyle='dotted', color='m')
-    ax.plot(sectioned_data['datetime'], bol['lower_band'], linestyle='dotted', color='m')
-    ax.plot(sectioned_data['datetime'], bol['moving_avg'], color='m')
-    ax.fill_between(sectioned_data['datetime'], bol['upper_band'], bol['lower_band'], color='m', alpha=0.2)
-    # Plot the predicted bollinger bands
-    pred_bol_selected = pred_bol.iloc[:merged_df.shape[0]]
-    # print(pred_bol_selected['upper_band'])
-    # print(pred_bol_selected['lower_band'])
-    # print(pred_bol_selected['moving_avg'])
-    ax.plot(merged_df['datetime'], pred_bol_selected['upper_band'], linestyle='dotted', color='r')
-    ax.plot(merged_df['datetime'], pred_bol_selected['lower_band'], linestyle='dotted', color='r')
-    ax.plot(merged_df['datetime'], pred_bol_selected['moving_avg'], color='y')
-    ax.fill_between(merged_df['datetime'], pred_bol_selected['upper_band'], pred_bol_selected['lower_band'], color='y', alpha=0.2)
+    ax.plot(sectioned_data['datetime'], bol['upper_band'], linestyle='dotted', color='m', alpha=0.7)
+    ax.plot(sectioned_data['datetime'], bol['lower_band'], linestyle='dotted', color='m', alpha=0.7)
+    ax.plot(sectioned_data['datetime'], bol['moving_avg'], color='m', alpha=0.5)
+    ax.fill_between(sectioned_data['datetime'], bol['upper_band'], bol['lower_band'], color='m', alpha=0.15)
     
     # Set labels
-    ax.set_ylabel('Price')
+    # ax.set_ylabel('Price')
     # ax.set_title(f'Predicted vs Actual Prices for Item {i+1}')
     
 # Show date underneath last subplot
-axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%d-%m-%Y\n%H:%M:%S'))
+axs[-1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%d-%m-%y'))
 # Add the legend to the figure
 fig.legend(*axs[0].get_legend_handles_labels(), loc='upper left', ncol=3)
 # Adjust the subplot spacing
